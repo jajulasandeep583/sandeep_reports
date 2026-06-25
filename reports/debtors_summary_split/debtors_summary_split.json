@@ -1,0 +1,13 @@
+{
+  "report_name": "Debtors Summary - Split",
+  "report_type": "Script Report",
+  "ref_doctype": "Sales Invoice",
+  "module": "Accounts",
+  "is_standard": "No",
+  "roles": [
+    "System Manager",
+    "Auditor",
+    "Accounts Manager",
+    "Accounts User"
+  ]
+}

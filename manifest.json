@@ -1,0 +1,62 @@
+[
+  {
+    "name": "Debtors Summary - Split",
+    "slug": "debtors_summary_split",
+    "py_len": 9709,
+    "js_len": 8277,
+    "roles": [
+      "System Manager",
+      "Auditor",
+      "Accounts Manager",
+      "Accounts User"
+    ]
+  },
+  {
+    "name": "Creditors Summary - Split",
+    "slug": "creditors_summary_split",
+    "py_len": 9833,
+    "js_len": 8416,
+    "roles": [
+      "System Manager",
+      "Auditor",
+      "Accounts Manager",
+      "Accounts User"
+    ]
+  },
+  {
+    "name": "Stock Summary",
+    "slug": "stock_summary",
+    "py_len": 10535,
+    "js_len": 6595,
+    "roles": [
+      "System Manager",
+      "Stock Manager",
+      "Stock User",
+      "Accounts Manager",
+      "Accounts User"
+    ]
+  },
+  {
+    "name": "Daily Business Summary",
+    "slug": "daily_business_summary",
+    "py_len": 8583,
+    "js_len": 11438,
+    "roles": [
+      "Accounts Manager",
+      "Accounts User"
+    ]
+  },
+  {
+    "name": "Receivable Follow-up",
+    "slug": "receivable_follow_up",
+    "py_len": 12302,
+    "js_len": 6069,
+    "roles": [
+      "System Manager",
+      "Accounts Manager",
+      "Accounts User",
+      "Sales Manager",
+      "Sales User"
+    ]
+  }
+]
