@@ -1,0 +1,23 @@
+[project]
+name = "sandeep_reports"
+authors = [{ name = "Sandeep", email = "jajulasandeep583@gmail.com" }]
+description = "Custom ERPNext v16 reports — Debtors/Creditors Summary Split, Stock Summary, Daily Business Summary, Receivable Follow-up"
+requires-python = ">=3.10"
+readme = "README.md"
+license = { text = "MIT" }
+dynamic = ["version"]
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/jajulasandeep583/sandeep_reports"
+Issues     = "https://github.com/jajulasandeep583/sandeep_reports/issues"
+
+[tool.frappe]
+frappe_version = ">=16.0.0"
+
+[build-system]
+requires      = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.module]
+name = "sandeep_reports"

@@ -1,51 +1,63 @@
-# sandeep_reports
+# Sandeep Reports
 
-Custom **ERPNext / Frappe v16** reports built for the RBOL / Ethanol site, kept here for
-version control and re-deployment. Each is a **DB-stored "Script Report"** (`is_standard = No`)
-— the Python (`report_script`) and client script (`javascript`) live in the database, so this
-repo stores them as plain files plus a small installer that (re)creates the `Report` documents
-on any site.
+A **Frappe / ERPNext v16** app that bundles five custom reports for the RBOL / Ethanol
+ERP. Each is a **Script Report** kept in the database; the app ships them as files and
+recreates them automatically on install and on every `bench migrate`.
+
+> Requires **Frappe v16** and **ERPNext v16** (the reports query ERPNext doctypes).
+> `server_script_enabled` must be `1` in the site config for Script Reports to run.
 
 ## Reports
 
-| Report | Based on | What it does |
-|---|---|---|
-| **Debtors Summary - Split** | GL Entry | Receivable summary, tree by Customer Group → Customer. The single *Invoiced* column is split into **Sales Invoice / Debit Note / Credit Note**. |
-| **Creditors Summary - Split** | GL Entry | Payable summary, tree by Supplier Group → Supplier, *Invoiced* split into **Purchase Invoice / Credit Note / Debit Note**. |
-| **Stock Summary** | Stock Ledger Entry | Tally-style Warehouse → Item Group → Item tree with Opening / Inward / Outward / Closing (Qty + Value). |
-| **Daily Business Summary** | Sales Invoice | Day-wise business snapshot. |
-| **Receivable Follow-up** | Sales Invoice | Lightweight collections list — pending bills, due dates, overdue days and customer mobile, grouped by Customer Group / Customer / Voucher. |
+| Report | Module | Based on | What it does |
+|---|---|---|---|
+| **Debtors Summary - Split** | Accounts | GL Entry | Receivable summary (Customer Group → Customer tree). *Invoiced* split into **Sales Invoice / Debit Note / Credit Note**. |
+| **Creditors Summary - Split** | Accounts | GL Entry | Payable summary (Supplier Group → Supplier). *Invoiced* split into **Purchase Invoice / Credit Note / Debit Note**. |
+| **Stock Summary** | Stock | Stock Ledger Entry | Tally-style Warehouse → Item Group → Item with Opening / Inward / Outward / Closing (Qty + Value). |
+| **Daily Business Summary** | Accounts | Sales Invoice | Day-wise business snapshot. |
+| **Receivable Follow-up** | Accounts | Sales Invoice | Lightweight collections list — pending bills, due dates, overdue days, customer mobile; group by Customer Group / Customer / Voucher. |
 
-## Correctness notes
+All have a collapsible tree, drill-down links, INR summary cards and an **Export to Excel** button.
 
-- **Debtors/Creditors Summary - Split** read directly from **`GL Entry` (`is_cancelled = 0`)** — the
+## Correctness
+
+- **Debtors / Creditors Summary - Split** read directly from **`GL Entry` (`is_cancelled = 0`)** — the
   same source the *General Ledger* report drills into — so Outstanding always reconciles with the GL
-  and cancelled/amended vouchers are handled correctly. Identity holds exactly:
-  `Outstanding = Opening + Invoice + Debit Note − Credit Note − Received/Paid`.
-- **Stock Summary**: Inward/Outward **Value** is keyed off `stock_value_difference` sign (not
-  `actual_qty`), so zero-qty revaluations (Stock Reconciliation) are captured and
-  `Closing Value = Opening + Inward − Outward` reconciles exactly. Closing matches the standard
-  *Stock Balance* report. Filters (Warehouse, Item Group) are tree-inclusive.
-- **Receivable Follow-up** is invoice-level (`Sales Invoice.outstanding_amount`), so it intentionally
-  excludes on-account/unallocated credits and JE adjustments — it is a "which bills to chase" view,
-  not a GL reconciliation.
+  and cancelled/amended vouchers are handled correctly:
+  `Outstanding = Opening + Invoice + Debit Note − Credit Note − Received/Paid` (exact).
+- **Stock Summary**: Inward/Outward **Value** is keyed off `stock_value_difference` (not `actual_qty`),
+  so zero-qty revaluations are captured and `Closing Value = Opening + Inward − Outward` reconciles
+  exactly; closing matches the standard *Stock Balance* report. Warehouse & Item Group filters are
+  tree-inclusive.
+- **Receivable Follow-up** is invoice-level (`Sales Invoice.outstanding_amount`) — a "which bills to
+  chase" view; it intentionally excludes on-account credits / JE adjustments and is not a GL recon.
 
-Every report has a collapsible tree, drill-down links, INR summary cards and an **Export to Excel**
-button.
-
-## Install / update on a site
+## Install
 
 ```bash
-cd /path/to/sandeep_reports        # this repo
-bench --site <your-site> console <<'EOF'
-import os
-os.environ["SANDEEP_REPORTS_DIR"] = "/home/jajula_sandeep/sandeep_reports"   # <- repo path
-exec(open(os.path.join(os.environ["SANDEEP_REPORTS_DIR"], "install.py")).read())
-EOF
+# on a Frappe v16 bench
+bench get-app https://github.com/jajulasandeep583/sandeep_reports.git
+bench --site <your-site> install-app sandeep_reports
+bench --site <your-site> clear-cache
 ```
 
-The installer is idempotent — it creates each `Report` if missing or updates the script/JS/roles if
-it already exists, then commits. Clear cache afterwards: `bench --site <your-site> clear-cache`.
+To update after pulling new commits:
 
-> These are non-standard (DB) reports: `server_script_enabled` must be `1` in the site config for
-> Script Reports to execute.
+```bash
+bench --site <your-site> migrate    # after_migrate re-applies the reports
+```
+
+## Layout
+
+```
+sandeep_reports/
+  pyproject.toml
+  sandeep_reports/
+    hooks.py            # required_apps + after_install/after_migrate
+    install.py          # idempotent report installer
+    modules.txt         # "Sandeep Reports"
+    reports_data/       # the report sources + manifest.json
+      <slug>/<slug>.py  # report_script
+      <slug>/<slug>.js  # client script
+      <slug>/<slug>.json# report meta (type, ref doctype, module, roles)
+```
