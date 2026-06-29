@@ -37,6 +37,19 @@
     ]
   },
   {
+    "name": "Stock Summary (Sales Item)",
+    "slug": "stock_summary_sales_item",
+    "py_len": 11114,
+    "js_len": 6141,
+    "roles": [
+      "System Manager",
+      "Stock Manager",
+      "Stock User",
+      "Accounts Manager",
+      "Accounts User"
+    ]
+  },
+  {
     "name": "Daily Business Summary",
     "slug": "daily_business_summary",
     "py_len": 8583,
