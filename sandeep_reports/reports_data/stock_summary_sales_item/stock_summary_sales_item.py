@@ -72,28 +72,57 @@ else:
 
 # Leaf = one row per (warehouse, item_group, sales_item). Items with no sales_item
 # bucket under "— No Sales Item —". Label comes from Sales Item.sales_item_name.
-# Inward/Outward VALUE is keyed off stock_value_difference sign (NOT actual_qty),
-# so zero-qty revaluations (Stock Reconciliation / rate changes) are captured too.
-# This guarantees: Closing Value = Opening Value + Inward Value - Outward Value.
+#
+# This report must reconcile EXACTLY to ERPNext's standard "Stock Balance" report.
+# Two things are required for that (both were wrong with a naive SUM(actual_qty)):
+#  (1) QTY change per entry is derived the same way Stock Balance does: for a Stock
+#      Reconciliation the change is the JUMP in qty_after_transaction (a reco sets an
+#      absolute physical count and records actual_qty = 0, so SUM(actual_qty) silently
+#      drops every reco-set quantity); for every other voucher it is plain actual_qty.
+#      `qty_delta` below encodes exactly that (LAG = previous running balance).
+#  (2) Item+warehouse rows whose CLOSING balance (qty AND value) is zero are hidden,
+#      mirroring Stock Balance's default (include_zero_stock_items off). An item that
+#      came fully in and went fully out within the period nets to zero closing and
+#      must NOT inflate the Inward/Outward flow totals. The inner HAVING does this at
+#      the (item, warehouse) grain BEFORE rolling up to the Sales Item leaf.
+# VALUE always uses stock_value_difference (reco populates it correctly), so
+# Closing Value = Opening + Inward - Outward and matches Stock Balance to the paisa.
 query = (
-	"SELECT sle.warehouse AS warehouse, i.item_group AS item_group, "
-	"COALESCE(i.sales_item, '__NOSI__') AS si_key, "
-	"COALESCE(si.sales_item_name, i.sales_item, '— No Sales Item —') AS si_label, "
-	"SUM(CASE WHEN sle.posting_date < %(fd)s THEN sle.actual_qty ELSE 0 END) AS opening_qty, "
-	"SUM(CASE WHEN sle.posting_date < %(fd)s THEN sle.stock_value_difference ELSE 0 END) AS opening_val, "
-	"SUM(CASE WHEN sle.actual_qty > 0 AND sle.posting_date >= %(fd)s THEN sle.actual_qty ELSE 0 END) AS in_qty, "
-	"SUM(CASE WHEN sle.stock_value_difference > 0 AND sle.posting_date >= %(fd)s THEN sle.stock_value_difference ELSE 0 END) AS in_val, "
-	"ABS(SUM(CASE WHEN sle.actual_qty < 0 AND sle.posting_date >= %(fd)s THEN sle.actual_qty ELSE 0 END)) AS out_qty, "
-	"ABS(SUM(CASE WHEN sle.stock_value_difference < 0 AND sle.posting_date >= %(fd)s THEN sle.stock_value_difference ELSE 0 END)) AS out_val, "
-	"SUM(sle.actual_qty) AS close_qty, "
-	"SUM(sle.stock_value_difference) AS close_val "
-	"FROM `tabStock Ledger Entry` sle "
-	"INNER JOIN `tabItem` i ON i.name = sle.item_code "
-	"LEFT JOIN `tabSales Item` si ON si.name = i.sales_item "
-	"WHERE sle.is_cancelled = 0 AND sle.company = %(co)s AND sle.posting_date <= %(td)s" + cond + " "
-	"GROUP BY sle.warehouse, i.item_group, si_key "
+	"SELECT iw.warehouse AS warehouse, iw.item_group AS item_group, iw.si_key AS si_key, iw.si_label AS si_label, "
+	"SUM(iw.opening_qty) AS opening_qty, SUM(iw.opening_val) AS opening_val, "
+	"SUM(iw.in_qty) AS in_qty, SUM(iw.in_val) AS in_val, "
+	"SUM(iw.out_qty) AS out_qty, SUM(iw.out_val) AS out_val, "
+	"SUM(iw.close_qty) AS close_qty, SUM(iw.close_val) AS close_val "
+	"FROM ("
+		"SELECT d.warehouse AS warehouse, d.item_group AS item_group, d.si_key AS si_key, d.si_label AS si_label, "
+		"SUM(CASE WHEN d.posting_date < %(fd)s THEN d.qty_delta ELSE 0 END) AS opening_qty, "
+		"SUM(CASE WHEN d.posting_date < %(fd)s THEN d.val_delta ELSE 0 END) AS opening_val, "
+		"SUM(CASE WHEN d.qty_delta > 0 AND d.posting_date >= %(fd)s THEN d.qty_delta ELSE 0 END) AS in_qty, "
+		"SUM(CASE WHEN d.val_delta > 0 AND d.posting_date >= %(fd)s THEN d.val_delta ELSE 0 END) AS in_val, "
+		"ABS(SUM(CASE WHEN d.qty_delta < 0 AND d.posting_date >= %(fd)s THEN d.qty_delta ELSE 0 END)) AS out_qty, "
+		"ABS(SUM(CASE WHEN d.val_delta < 0 AND d.posting_date >= %(fd)s THEN d.val_delta ELSE 0 END)) AS out_val, "
+		"SUM(d.qty_delta) AS close_qty, SUM(d.val_delta) AS close_val "
+		"FROM ("
+			"SELECT sle.item_code AS item_code, sle.warehouse AS warehouse, sle.posting_date AS posting_date, "
+			"i.item_group AS item_group, COALESCE(i.sales_item, '__NOSI__') AS si_key, "
+			"COALESCE(si.sales_item_name, i.sales_item, '— No Sales Item —') AS si_label, "
+			"CASE WHEN sle.voucher_type = 'Stock Reconciliation' AND (sle.batch_no IS NULL OR sle.batch_no = '') "
+				"THEN sle.qty_after_transaction - COALESCE(LAG(sle.qty_after_transaction) OVER ("
+					"PARTITION BY sle.item_code, sle.warehouse "
+					"ORDER BY sle.posting_date, sle.posting_time, sle.creation), 0) "
+				"ELSE sle.actual_qty END AS qty_delta, "
+			"sle.stock_value_difference AS val_delta "
+			"FROM `tabStock Ledger Entry` sle "
+			"INNER JOIN `tabItem` i ON i.name = sle.item_code "
+			"LEFT JOIN `tabSales Item` si ON si.name = i.sales_item "
+			"WHERE sle.is_cancelled = 0 AND sle.company = %(co)s AND sle.posting_date <= %(td)s" + cond + " "
+		") d "
+		"GROUP BY d.item_code, d.warehouse, d.item_group, d.si_key, d.si_label "
+		"HAVING ABS(SUM(d.qty_delta)) > 0.0001 OR ABS(SUM(d.val_delta)) > 0.0001 "
+	") iw "
+	"GROUP BY iw.warehouse, iw.item_group, iw.si_key "
 	+ having +
-	"ORDER BY sle.warehouse, i.item_group, si_label"
+	"ORDER BY iw.warehouse, iw.item_group, iw.si_label"
 )
 data_rows = frappe.db.sql(query, params, as_dict=True)
 
