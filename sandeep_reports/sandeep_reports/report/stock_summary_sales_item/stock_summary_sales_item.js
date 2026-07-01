@@ -1,5 +1,5 @@
-// Tally-style Stock Summary (Sales Item) — Warehouse > Item Group > Sales Item
-frappe.query_reports["Stock Summary (Sales Item)"] = {
+// Tally-style Stock Summary Sales Item — Warehouse > Item Group > Sales Item
+frappe.query_reports["Stock Summary Sales Item"] = {
 	filters: [
 		{
 			fieldname: "company",
